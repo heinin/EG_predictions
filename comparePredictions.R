@@ -2,13 +2,15 @@
 # Comparing features of two sets of E-G predictions
 # ======================================
 
+# Work in progress
+
 # Required columns:
 # chr
-# start
-# end
+# start [element start pos]
+# end [element end pos]
 # CellType
 # TargetGene
-# startTSS
+# startTSS [gene TSS pos]
 
 # If a cell type mapping file is provided, column names must match options --pred1name
 # and --pred2name.
@@ -65,8 +67,9 @@ pred1name <- opt$pred1name
 pred2 <- fread(opt$pred2)
 pred2name <- opt$pred2name
 promoter.activity <- fread(opt$promoteractivity)
+
 # Keeping ABC promoters?
-if (pred1name=="ABC" & opt$ABCkeeppromoters==FALSE){
+if ((pred1name=="ABC" | pred2name=="ABC") & opt$ABCkeeppromoters==FALSE){
   pred1 <- subset(pred1, class != "promoter")
 }
 
@@ -102,6 +105,7 @@ preds <- lapply(pred.list, function(dt) {
   dt$name <- with(dt, paste0(chr, ":", range))
   dt$gene.cell <- with(dt, paste0(TargetGene, ":", CellType))
   dt$enh.cell <- with(dt, paste0(name, ":", CellType))
+  dt$enh.gene <- with(dt, paste0(name, ":", TargetGene))
   dt$enhancerbps <- with(dt, end-start)
   dt
 })
@@ -122,9 +126,9 @@ pred2 <- pred2[gene.cell %in% promoter.activity.melt$gene.cell]
 dim(pred2)
 
 # Testing
-#set.seed(123)
-#pred1 <- pred1[sample(1:nrow(pred1), 20000, replace=FALSE) ,]
-#pred2 <- pred2[sample(1:nrow(pred2), 20000, replace=FALSE) ,]
+set.seed(123)
+pred1 <- pred1[sample(1:nrow(pred1), 20000, replace=FALSE) ,]
+pred2 <- pred2[sample(1:nrow(pred2), 20000, replace=FALSE) ,]
 
 # ======================================
 # Summary statistics
@@ -601,8 +605,149 @@ venn.diagram(
 )
 
 # ======================================
-# # TODO: overlapping and unique enhancer-gene combos across all cell types
+# # Overlapping and unique enhancer-gene combos across all cell types
 # ======================================
+
+# Numbers of unique enhancer-gene combos
+pred1$enh.gene <- paste(pred1$name, pred1$TargetGene, sep="_")
+pred2$enh.gene <- paste(pred2$name, pred2$TargetGene, sep="_")
+length(unique(pred1$enh.gene))
+length(unique(pred2$enh.gene))
+
+# All unique genes
+genes <- unique(c(pred1$TargetGene, pred2$TargetGene))
+length(genes)
+
+# Run in parallel
+plan(multisession)
+options(future.globals.maxSize = +Inf)
+# Start the clock
+ptm <- proc.time()
+# For every gene, find overlapping and unique elements
+SharedUniqueElementsGene <- future_lapply(genes, function(TargetGene){
+  pred1.gene <- pred1[TargetGene==TargetGene]
+  pred2.gene <- pred2[TargetGene==TargetGene]
+  
+  pred1.gene.gr <- GRanges(seqnames=pred1.gene$chr,
+                           ranges=IRanges(start=pred1.gene$start, end=pred1.gene$end))
+  
+  pred2.gene.gr <- GRanges(seqnames=pred2.gene$chr,
+                           ranges=IRanges(start=pred2.gene$start, end=pred2.gene$end))
+  
+  # Overlapping elements
+  pred1.overlapping.pred2.hits <- as.data.table(findOverlaps(pred1.gene.gr, pred2.gene.gr, minoverlap=1))
+  
+  # If there are no overlapping elements...
+  if (nrow(pred1.overlapping.pred2.hits)==0){
+    pred1.unique <- pred1.gene
+    pred1.unique$group <- paste0(pred1name, ".unique")
+    pred2.unique <- pred2.gene
+    pred2.unique$group <- paste0(pred2name, ".unique")
+    
+    merged_groups <- dplyr::bind_rows(pred1.unique, pred2.unique)
+    
+  } else {
+    pred1.overlapping.pred2 <- pred1.gene[unique(pred1.overlapping.pred2.hits$queryHits)]
+    pred2.overlapping.pred1 <- pred2.gene[unique(pred1.overlapping.pred2.hits$subjectHits)]
+    
+    pred1.overlapping.pred2$group <- paste0(pred1name, ".overlapping.", pred2name)
+    pred2.overlapping.pred1$group <- paste0(pred2name, ".overlapping.", pred1name)
+    
+    # Unique to pred1
+    pred1.unique <- pred1.gene[-(unique(pred1.overlapping.pred2.hits$queryHits))]
+    dim(pred1.unique)
+    if (nrow(pred1.unique)>0){
+      pred1.unique$group <- paste0(pred1name, ".unique")
+    }
+    
+    # Unique to pred2
+    pred2.unique <- pred2.gene[-(unique(pred1.overlapping.pred2.hits$subjectHits))]
+    dim(pred2.unique)
+    if (nrow(pred2.unique)>0){
+      pred2.unique$group <- paste0(pred2name, ".unique")
+    }
+    
+    merged_groups <- dplyr::bind_rows(pred1.overlapping.pred2, pred1.unique, pred2.unique)
+    
+  }
+  
+  merged_groups
+  
+})
+
+# Stop the clock
+proc.time() - ptm
+
+names(SharedUniqueElementsGene) <- genes
+# Collapsing to a table
+SharedUniqueElementsGene_df <- as.data.frame(do.call(rbind, SharedUniqueElementsGene))
+head(SharedUniqueElementsGene_df)
+dim(SharedUniqueElementsGene_df)
+
+# Writing to a file
+filename <- paste(pred1name, pred2name, "_shared_unique_TargetGene.tsv", sep="_")
+write.table(SharedUniqueElementsGene_df, file.path(out.dir, filename), sep = "\t", row.names = F)
+
+# Cumulative density plot of distances to the TSS for each groups
+distTSSplotSharedUnique <- ggplot(SharedUniqueElementsGene_df, aes(x=abs(distance), color=group)) + 
+  stat_ecdf() + 
+  theme_bw() +
+  xlab("Distance to TSS") + 
+  ylab("Cumulative density")
+
+# Saving as a PDF
+filename <- paste(pred1name, pred2name, "shared_unique_TargetGene_distTSSplot.pdf", sep="_")
+ggsave(file.path(out.dir, filename), 
+       distTSSplot,
+       width = 6, height = 5)
+
+# TODO: plot additional features
+# N of cell types where the gene is expressed?
+
+# Venn diagram of overlapping enhancer-gene-celltype combos
+SharedUniqueElementsGene_df$longname <- paste(SharedUniqueElementsGene_df$chr, SharedUniqueElementsGene_df$start, SharedUniqueElementsGene_df$end, SharedUniqueElementsGene_df$TargetGene, sep="_")
+
+pred1.links <- SharedUniqueElementsGene_df[which(SharedUniqueElementsGene_df$group %in% c("pred1.unique", "pred1.overlapping.pred2")),]$longname
+pred2.links <- SharedUniqueElementsGene_df[which(SharedUniqueElementsGene_df$group %in% c("pred2.unique", "pred1.overlapping.pred2")),]$longname
+
+# Proportion of shared enhancer-gene-celltype combos
+length(intersect(pred1.links, pred2.links))/length(unique(c(pred1.links, pred2.links)))
+
+filename <- paste(pred1name, pred2name, "EG_Venn.tiff", sep="_")
+venn.diagram(
+  x = list(pred1.links, pred2.links),
+  category.names = c(pred1name , pred2name),
+  filename = file.path(out.dir, filename),
+  output=TRUE,
+  
+  # Output features
+  imagetype="tiff" ,
+  height = 480 , 
+  width = 480 , 
+  resolution = 300,
+  compression = "lzw",
+  
+  # Circles
+  #lwd = 2,
+  #lty = 'blank',
+  #fill = 'blank',
+  
+  # Numbers
+  cex = .6,
+  #fontface = "bold",
+  fontfamily = "sans",
+  
+  # Set names
+  cat.cex = 0.6,
+  #cat.fontface = "bold",
+  cat.default.pos = "outer",
+  cat.pos = c(27, -27),
+  cat.dist = c(0.055, 0.055),
+  cat.fontfamily = "sans",
+  inverted=TRUE,
+  reverse=TRUE
+  #rotation = 1
+)
 
 # ======================================
 # Finding overlapping and unique element-gene-celltype combinations
@@ -624,7 +769,7 @@ length(genes_celltypes)
 
 # Run in parallel
 plan(multisession)
-#options(future.globals.maxSize = +Inf)
+options(future.globals.maxSize = +Inf)
 # Start the clock
 ptm <- proc.time()
 # For every gene-celltype combination, find overlapping and unique elements
@@ -700,7 +845,7 @@ distTSSplotSharedUnique <- ggplot(SharedUniqueElementsGeneCell_df, aes(x=abs(dis
   ylab("Cumulative density")
 
 # Saving as a PDF
-filename <- paste(pred1name, pred2name, "shared_unique_distTSSplot.pdf", sep="_")
+filename <- paste(pred1name, pred2name, "shared_unique_TargetGeneCellType_distTSSplot.pdf", sep="_")
 ggsave(file.path(out.dir, filename), 
        distTSSplot,
        width = 6, height = 5)
