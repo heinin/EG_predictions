@@ -74,7 +74,7 @@ if (pred1name=="ABC" & opt$ABCkeeppromoters==FALSE){
 }
 
 if (pred2name=="ABC" & opt$ABCkeeppromoters==FALSE){
-  pred2 <- subset(pred1, class != "promoter")
+  pred2 <- subset(pred2, class != "promoter")
 }
 
 # Only compare shared cell types?
