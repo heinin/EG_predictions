@@ -69,8 +69,12 @@ pred2name <- opt$pred2name
 promoter.activity <- fread(opt$promoteractivity)
 
 # Keeping ABC promoters?
-if ((pred1name=="ABC" | pred2name=="ABC") & opt$ABCkeeppromoters==FALSE){
+if (pred1name=="ABC" & opt$ABCkeeppromoters==FALSE){
   pred1 <- subset(pred1, class != "promoter")
+}
+
+if (pred2name=="ABC" & opt$ABCkeeppromoters==FALSE){
+  pred2 <- subset(pred1, class != "promoter")
 }
 
 # Only compare shared cell types?
@@ -618,6 +622,7 @@ length(unique(pred2$enh.gene))
 genes <- unique(c(pred1$TargetGene, pred2$TargetGene))
 length(genes)
 
+# TODO: future_lapply parallelization doesn't work on the cluster?
 # Run in parallel
 plan(multisession)
 options(future.globals.maxSize = +Inf)
