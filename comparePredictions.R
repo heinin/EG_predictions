@@ -6,11 +6,11 @@
 
 # Required columns:
 # chr
-# start
-# end
+# start [element start pos]
+# end [element end pos]
 # CellType
-# TargetGene
-# startTSS
+# TargetGene [gene symbol]
+# startTSS [target gene TSS pos]
 
 # If a cell type mapping file is provided, column names must match options --pred1name
 # and --pred2name.
@@ -67,7 +67,8 @@ plotCDF <- function(plotdata, xvar, xlab, color, filename){
     stat_ecdf() + 
     theme_bw() +
     xlab(xlab) + 
-    ylab("Cumulative density")
+    ylab("Cumulative density") +
+    labs(color="Group") 
   
   # Saving as a PDF
   ggsave(file.path(out.dir, filename), 
@@ -76,11 +77,11 @@ plotCDF <- function(plotdata, xvar, xlab, color, filename){
 }
 
 # Venn diagram
-plotVenn <- function(pred1.vector, pred2.vector, filename){
+plotVenn <- function(pred1.vector, pred2.vector, pred1name, pred2name, filename){
 
   venn.diagram(
     x = list(pred1.vector, pred2.vector),
-    category.names = c(pred1name , pred2name),
+    category.names = c(pred1name, pred2name),
     filename = file.path(out.dir, filename),
     output=TRUE,
     
@@ -369,8 +370,6 @@ write.table(CellTypeSummariesWith0[[pred2name]], file.path(out.dir, file.name), 
 # Plotting features
 # ======================================
 
-# TODO: call the plotting functions
-
 # All enhancers, distance to TSS in a given cell types.
 TSSplotData <- lapply(names(pred.list), function(pred) {
   dt <- pred.list[[pred]]
@@ -448,7 +447,7 @@ plotCDF(plotdata=eDegreePlotData.df,
         xvar="mean.e.degree",
         xlab="Mean number of genes per enhancer in  a given cell type",
         color="group",
-        filename=paste(pred1name, pred2name, "GperE.PerCelltype.pdf", sep="_"))
+        filename=paste(pred1name, pred2name, "GperEperCelltype.pdf", sep="_"))
 
 # Mean number of enhancers connected to each gene in a given cell type, including genes
 # with zero enhancers
@@ -469,7 +468,7 @@ plotCDF(plotdata=gDegreePlotData.df,
         xvar="mean.g.degree.include0",
         xlab="Mean number of enhancers per gene in a given cell type",
         color="group",
-        filename=paste(pred1name, pred2name, "EperG.PerCelltype.Incl0.pdf", sep="_"))
+        filename=paste(pred1name, pred2name, "EperGperCelltypeIncl0.pdf", sep="_"))
 
 # What is the total number of unique bps included in enhancers (for any gene) 
 # across all shared cell types? Including genes with zero enhancers.
@@ -492,7 +491,7 @@ geneEnhancerSummary.melt$pred <- gsub("UniqueBases.", "", geneEnhancerSummary.me
 plotCDF(plotdata=geneEnhancerSummary.melt,
         xvar="TotalUniqueBases",
         xlab="Unique enhancer bps per gene across shared cell types",
-        color="group",
+        color="pred",
         filename=paste(pred1name, pred2name, "uniqueEnhancerbpsPerGeneAllCelltypes.pdf", sep="_"))
 
 # What the total number of unique bps included in enhancers (for any gene) 
@@ -585,7 +584,7 @@ pred2Enhancers <- unique(c(pred2.unique$name, pred1.overlapping.pred2$name))
 length(intersect(pred1Enhancers, pred2Enhancers))/length(unique(c(pred1Enhancers, pred2Enhancers)))
 
 # Creating the Venn diagram
-plotVenn(pred1.vector=pred1Enhancers, pred2.vector=pred2Enhancers, filename=paste(pred1name, pred2name, "elements_Venn.tiff", sep="_"))
+plotVenn(pred1.vector=pred1Enhancers, pred2.vector=pred2Enhancers, pred1name=pred1name, pred2name=pred2name, filename=paste(pred1name, pred2name, "elements_Venn.tiff", sep="_"))
 
 # ======================================
 # # Overlapping and unique enhancer-gene combos across all cell types
@@ -704,7 +703,7 @@ pred2Links <- SharedUniqueElementsGene_df[which(SharedUniqueElementsGene_df$grou
 length(intersect(pred1Links, pred2Links))/length(unique(c(pred1Links, pred2Links)))
 
 # Creating the Venn diagram
-plotVenn(pred1.vector=pred1Links, pred2.vector=pred2Links, filename=paste(pred1name, pred2name, "EG_Venn.tiff", sep="_"))
+plotVenn(pred1.vector=pred1Links, pred2.vector=pred2Links, pred1name=pred1name, pred2name=pred2name, filename=paste(pred1name, pred2name, "EG_Venn.tiff", sep="_"))
 
 # ======================================
 # Finding overlapping and unique element-gene-celltype combinations
@@ -830,4 +829,4 @@ pred2ElementGeneCell <- SharedUniqueElementsGeneCell_df[which(SharedUniqueElemen
 length(intersect(pred1ElementGeneCell, pred2ElementGeneCell))/length(unique(c(pred1ElementGeneCell, pred2ElementGeneCell)))
 
 # Creating the Venn diagram
-plotVenn(pred1.vector=pred1ElementGeneCell, pred2.vector=pred2ElementGeneCell, filename=paste(pred1name, pred2name, "EGcelltype_Venn.tiff", sep="_"))
+plotVenn(pred1.vector=pred1ElementGeneCell, pred2.vector=pred2ElementGeneCell, pred1name=pred1name, pred2name=pred2name, filename=paste(pred1name, pred2name, "EGcelltype_Venn.tiff", sep="_"))
