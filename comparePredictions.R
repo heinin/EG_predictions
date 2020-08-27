@@ -58,6 +58,63 @@ opt <- parse_args(OptionParser(option_list=option.list))
 out.dir <- opt$out.dir
 
 # ======================================
+# Helper functions
+# ======================================
+
+# Cumulative density
+plotCDF <- function(plotdata, xvar, xlab, color, filename){
+  distTSSplot <- ggplot(plotdata, aes(x=eval(parse(text = xvar)), color=eval(parse(text = color)))) + 
+    stat_ecdf() + 
+    theme_bw() +
+    xlab(xlab) + 
+    ylab("Cumulative density")
+  
+  # Saving as a PDF
+  ggsave(file.path(out.dir, filename), 
+         distTSSplot,
+         width = 6, height = 5)
+}
+
+# Venn diagram
+plotVenn <- function(pred1.vector, pred2.vector, filename){
+
+  venn.diagram(
+    x = list(pred1.vector, pred2.vector),
+    category.names = c(pred1name , pred2name),
+    filename = file.path(out.dir, filename),
+    output=TRUE,
+    
+    # Output features
+    imagetype="tiff" ,
+    height = 480 , 
+    width = 480 , 
+    resolution = 300,
+    compression = "lzw",
+    
+    # Circles
+    #lwd = 2,
+    #lty = 'blank',
+    #fill = 'blank',
+    
+    # Numbers
+    cex = .6,
+    #fontface = "bold",
+    fontfamily = "sans",
+    
+    # Set names
+    cat.cex = 0.6,
+    #cat.fontface = "bold",
+    cat.default.pos = "outer",
+    cat.pos = c(27, -27),
+    cat.dist = c(0.055, 0.055),
+    cat.fontfamily = "sans",
+    inverted=TRUE,
+    reverse=TRUE
+    #rotation = 1
+  )
+}
+
+# ======================================
 # Data
 # ======================================
 
@@ -67,9 +124,13 @@ pred1name <- opt$pred1name
 pred2 <- fread(opt$pred2)
 pred2name <- opt$pred2name
 promoter.activity <- fread(opt$promoteractivity)
+
 # Keeping ABC promoters?
 if (pred1name=="ABC" & opt$ABCkeeppromoters==FALSE){
   pred1 <- subset(pred1, class != "promoter")
+}
+if (pred2name=="ABC" & opt$ABCkeeppromoters==FALSE){
+  pred2 <- subset(pred2, class != "promoter")
 }
 
 # Only compare shared cell types?
@@ -124,13 +185,13 @@ pred2 <- pred2[gene.cell %in% promoter.activity.melt$gene.cell]
 dim(pred2)
 
 # Saving as objects for future
-saveRDS(pred1, "pred1.RData")
-saveRDS(pred2, "pred2.RData")
+#saveRDS(pred1, "pred1.RData")
+#saveRDS(pred2, "pred2.RData")
 
 # Testing
-set.seed(123)
-pred1 <- pred1[sample(1:nrow(pred1), 20000, replace=FALSE) ,]
-pred2 <- pred2[sample(1:nrow(pred2), 20000, replace=FALSE) ,]
+#set.seed(123)
+#pred1 <- pred1[sample(1:nrow(pred1), 20000, replace=FALSE) ,]
+#pred2 <- pred2[sample(1:nrow(pred2), 20000, replace=FALSE) ,]
 
 #======================================
 #Summary statistics
@@ -171,7 +232,6 @@ GeneCellTypeSummaries <- lapply(pred.list, function(dt) {
   GeneCellTypeSummary <- dt %>% group_by(gene.cell) %>% summarise(
     TargetGene=unique(TargetGene),
     CellType=unique(CellType),
-    #gene.cell=gene.cell,
     TotalEnhancers=n(),
     TotalUniqueBases=sum(width(reduce(GRangesFromBed(data.frame(chr=chr, start=start, end=end))))))
   as.data.table(GeneCellTypeSummary)
@@ -309,8 +369,9 @@ write.table(CellTypeSummariesWith0[[pred2name]], file.path(out.dir, file.name), 
 # Plotting features
 # ======================================
 
-# All enhancers, distance to TSS in a given cell types.
+# TODO: call the plotting functions
 
+# All enhancers, distance to TSS in a given cell types.
 TSSplotData <- lapply(names(pred.list), function(pred) {
   dt <- pred.list[[pred]]
   absdistances <- as.data.frame(abs(dt[,distance]))
@@ -322,18 +383,12 @@ TSSplotData <- lapply(names(pred.list), function(pred) {
 
 TSSplotData.df <- as.data.frame(do.call(rbind, TSSplotData))
 
-# Cumulative density 
-distTSSplot <- ggplot(TSSplotData.df, aes(x=absdistance, color=group)) + 
-  stat_ecdf() + 
-  theme_bw() +
-  xlab("Distance to TSS") + 
-  ylab("Cumulative density")
-
-# Saving as a PDF
-file.name <- paste(pred1name, pred2name, "distancetoTSS.pdf", sep="_")
-ggsave(file.path(out.dir, file.name), 
-       distTSSplot,
-       width = 6, height = 5)
+# Plotting cumulative density
+plotCDF(plotdata=TSSplotData.df,
+        xvar="absdistance",
+        xlab="Distance to TSS",
+        color="group",
+        filename=paste(pred1name, pred2name, "distancetoTSS.pdf", sep="_"))
 
 # Number of enhancers in a given cell type
 
@@ -348,18 +403,12 @@ numEnhancersPlotData <- lapply(names(CellTypeSummariesWith0), function(pred) {
 
 numEnhancersPlotData.df <- as.data.frame(do.call(rbind, numEnhancersPlotData))
 
-# Cumulative density 
-numEnhancersPlot <- ggplot(numEnhancersPlotData.df, aes(x=numEnhancers, color=group)) + 
-  stat_ecdf() + 
-  theme_bw() +
-  xlab("Number of enhancers in a given cell type") + 
-  ylab("Cumulative density")
-
-# Saving as a PDF
-file.name <- paste(pred1name, pred2name, "enhancersPerCelltype.pdf", sep="_")
-ggsave(file.path(out.dir, file.name), 
-       numEnhancersPlot,
-       width = 6, height = 5)
+# Plotting cumulative density
+plotCDF(plotdata=numEnhancersPlotData.df,
+        xvar="numEnhancers",
+        xlab="Number of enhancers in a given cell type",
+        color="group",
+        filename=paste(pred1name, pred2name, "enhancersPerCelltype.pdf", sep="_"))
 
 # Number of enhancer-gene connections in a given cell type
 
@@ -374,18 +423,12 @@ numEGconnectionsPlotData <- lapply(names(CellTypeSummariesWith0), function(pred)
 
 numEGconnectionsPlotData.df <- as.data.frame(do.call(rbind, numEGconnectionsPlotData))
 
-# Cumulative density 
-numEGconnectionsPlot <- ggplot(numEGconnectionsPlotData.df, aes(x=numConnections, color=group)) + 
-  stat_ecdf() + 
-  theme_bw() +
-  xlab("Number of connections ina given cell type") + 
-  ylab("Cumulative density")
-
-# Saving as a PDF
-file.name <- paste(pred1name, pred2name, "connectionsPerCelltype.pdf", sep="_")
-ggsave(file.path(out.dir, file.name), 
-       numEnhancersPlot,
-       width = 6, height = 5)
+# Plotting cumulative density
+plotCDF(plotdata=numEGconnectionsPlotData.df,
+        xvar="numConnections",
+        xlab="Number of connections in a given cell type",
+        color="group",
+        filename=paste(pred1name, pred2name, "connectionsPerCelltype.pdf", sep="_"))
 
 # Mean number of genes regulated by each enhancer in a given cell type
 
@@ -400,18 +443,12 @@ eDegreePlotData <- lapply(names(CellTypeSummariesWith0), function(pred) {
 
 eDegreePlotData.df <- as.data.frame(do.call(rbind, eDegreePlotData))
 
-# Cumulative density 
-eDegreePlot <- ggplot(eDegreePlotData.df, aes(x=mean.e.degree, color=group)) + 
-  stat_ecdf() + 
-  theme_bw() +
-  xlab("Mean number of genes per enhancer in  a given cell type") + 
-  ylab("Cumulative density")
-
-# Saving as a PDF
-file.name <- paste(pred1name, pred2name, "GperE.PerCelltype.pdf", sep="_")
-ggsave(file.path(out.dir, file.name), 
-       eDegreePlot,
-       width = 6, height = 5)
+# Plotting cumulative density
+plotCDF(plotdata=eDegreePlotData.df,
+        xvar="mean.e.degree",
+        xlab="Mean number of genes per enhancer in  a given cell type",
+        color="group",
+        filename=paste(pred1name, pred2name, "GperE.PerCelltype.pdf", sep="_"))
 
 # Mean number of enhancers connected to each gene in a given cell type, including genes
 # with zero enhancers
@@ -427,18 +464,12 @@ gDegreePlotData <- lapply(names(CellTypeSummariesWith0), function(pred) {
 
 gDegreePlotData.df <- as.data.frame(do.call(rbind, gDegreePlotData))
 
-# Cumulative density 
-gDegreePlot <- ggplot(gDegreePlotData.df, aes(x=mean.g.degree.include0, color=group)) + 
-  stat_ecdf() + 
-  theme_bw() +
-  xlab("Mean number of enhancers per gene in a given cell type") + 
-  ylab("Cumulative density")
-
-# Saving as a PDF
-file.name <- paste(pred1name, pred2name, "EperG.PerCelltype.Incl0.pdf", sep="_")
-ggsave(file.path(out.dir, file.name), 
-       gDegreePlot,
-       width = 6, height = 5)
+# Plotting cumulative density
+plotCDF(plotdata=gDegreePlotData.df,
+        xvar="mean.g.degree.include0",
+        xlab="Mean number of enhancers per gene in a given cell type",
+        color="group",
+        filename=paste(pred1name, pred2name, "EperG.PerCelltype.Incl0.pdf", sep="_"))
 
 # What is the total number of unique bps included in enhancers (for any gene) 
 # across all shared cell types? Including genes with zero enhancers.
@@ -457,18 +488,12 @@ geneEnhancerSummary <- merge(geneEnhancerSummaries[[1]], geneEnhancerSummaries[[
 geneEnhancerSummary.melt <- geneEnhancerSummary %>% gather(pred, TotalUniqueBases, -TargetGene)
 geneEnhancerSummary.melt$pred <- gsub("UniqueBases.", "", geneEnhancerSummary.melt$pred)
 
-# Cumulative density 
-Ebps <- ggplot(geneEnhancerSummary.melt, aes(x=TotalUniqueBases, color=pred)) + 
-  stat_ecdf() + 
-  theme_bw() +
-  xlab("Unique enhancer bps per gene across shared cell types") + 
-  ylab("Cumulative density")
-
-# Saving as a PDF
-file.name <- paste(pred1name, pred2name, "uniqueEnhancerbpsPerGeneAllCelltypes.pdf", sep="_")
-ggsave(file.path(out.dir, file.name), 
-       Ebps,
-       width = 6, height = 5)
+# Plotting cumulative density
+plotCDF(plotdata=geneEnhancerSummary.melt,
+        xvar="TotalUniqueBases",
+        xlab="Unique enhancer bps per gene across shared cell types",
+        color="group",
+        filename=paste(pred1name, pred2name, "uniqueEnhancerbpsPerGeneAllCelltypes.pdf", sep="_"))
 
 # What the total number of unique bps included in enhancers (for any gene) 
 # in a given cell type? Including genes with zero enhancers.
@@ -488,18 +513,12 @@ geneCelltypeEnhancerSummary <- merge(geneCelltypeEnhancerSummaries[[1]], geneCel
 geneCelltypeEnhancerSummary.melt <- geneCelltypeEnhancerSummary %>% gather(pred, UniqueBases, -gene.cell)
 geneCelltypeEnhancerSummary.melt$pred <- gsub("UniqueBases.", "", geneCelltypeEnhancerSummary.melt$pred)
 
-# Cumulative density 
-Ebps_each_celltype <- ggplot(geneCelltypeEnhancerSummary.melt, aes(x=UniqueBases, color=pred)) + 
-  stat_ecdf() + 
-  theme_bw() +
-  xlab("Unique enhancer bps per gene in a given cell type") + 
-  ylab("Cumulative density")
-
-# Saving as a PDF
-file.name <- paste(pred1name, pred2name, "uniqueEnhancerbpsPerGeneGivenCelltype.pdf", sep="_")
-ggsave(file.path(out.dir, file.name), 
-       Ebps_each_celltype,
-       width = 6, height = 5)
+# Plotting cumulative density
+plotCDF(plotdata=geneCelltypeEnhancerSummary.melt,
+        xvar="UniqueBases",
+        xlab="Unique enhancer bps per gene in a given cell type",
+        color="pred",
+        filename=paste(pred1name, pred2name, "uniqueEnhancerbpsPerGeneGivenCelltype.pdf", sep="_"))
 
 # N of enhancers per gene per cell type where the gene is expressed,
 # including expressed genes with zero enhancers
@@ -518,18 +537,12 @@ geneCelltypeEnhancerExpressedSummary <- merge(geneCelltypeEnhancerExpressedSumma
 geneCelltypeEnhancerExpressedSummary.melt <- geneCelltypeEnhancerExpressedSummary %>% gather(pred, NenhancersPerExpressed, -gene.cell)
 geneCelltypeEnhancerExpressedSummary.melt$pred <- gsub("NenhancersPerExpressed.", "", geneCelltypeEnhancerExpressedSummary.melt$pred)
 
-# Cumulative density 
-enhancerGeneCelltype <- ggplot(geneCelltypeEnhancerExpressedSummary.melt, aes(x=NenhancersPerExpressed, color=pred)) + 
-  stat_ecdf() + 
-  theme_bw() +
-  xlab("Enhancers per gene / # cell types where the gene is expressed") + 
-  ylab("Cumulative density")
-
-# Saving as a PDF
-file.name <- paste(pred1name, pred2name, "EnhancersPerGenePerCelltypeExpWith0.pdf", sep="_")
-ggsave(file.path(out.dir, file.name), 
-       Ebps_each_celltype,
-       width = 6, height = 5)
+# Plotting cumulative density
+plotCDF(plotdata=geneCelltypeEnhancerExpressedSummary.melt,
+        xvar="NenhancersPerExpressed",
+        xlab="Enhancers per gene / # cell types where the gene is expressed",
+        color="pred",
+        filename=paste(pred1name, pred2name, "EnhancersPerGenePerCelltypeExpWith0.pdf", sep="_"))
 
 # ======================================
 # Finding overlapping and unique elements
@@ -571,40 +584,8 @@ pred2Enhancers <- unique(c(pred2.unique$name, pred1.overlapping.pred2$name))
 # Proportion of shared elements
 length(intersect(pred1Enhancers, pred2Enhancers))/length(unique(c(pred1Enhancers, pred2Enhancers)))
 
-# Plotting
-filename <- paste(pred1name, pred2name, "elements_Venn.tiff", sep="_")
-venn.diagram(
-  x = list(pred1Enhancers, pred2Enhancers),
-  category.names = c(pred1name , pred2name),
-  filename = file.path(out.dir, filename),
-  output=TRUE,
-  
-  # Output features
-  imagetype="tiff" ,
-  height = 480 , 
-  width = 480 , 
-  resolution = 300,
-  compression = "lzw",
-  
-  # Circles
-  #lwd = 2,
-  #lty = 'blank',
-  #fill = 'blank',
-  
-  # Numbers
-  cex = .6,
-  #fontface = "bold",
-  fontfamily = "sans",
-  
-  # Set names
-  cat.cex = 0.6,
-  #cat.fontface = "bold",
-  cat.default.pos = "outer",
-  cat.pos = c(-27, 27),
-  cat.dist = c(0.055, 0.055),
-  cat.fontfamily = "sans"
-  #rotation = 1
-)
+# Creating the Venn diagram
+plotVenn(pred1.vector=pred1Enhancers, pred2.vector=pred2Enhancers, filename=paste(pred1name, pred2name, "elements_Venn.tiff", sep="_"))
 
 # ======================================
 # # Overlapping and unique enhancer-gene combos across all cell types
@@ -695,6 +676,7 @@ proc.time() - ptm
 names(SharedUniqueElementsGene) <- genes
 # Collapsing to a table
 SharedUniqueElementsGene_df <- as.data.frame(do.call(dplyr::bind_rows, SharedUniqueElementsGene))
+SharedUniqueElementsGene_df$absdistance <- abs(SharedUniqueElementsGene_df$distance)
 head(SharedUniqueElementsGene_df)
 dim(SharedUniqueElementsGene_df)
 
@@ -702,18 +684,12 @@ dim(SharedUniqueElementsGene_df)
 filename <- paste(pred1name, pred2name, "_shared_unique_TargetGene.tsv", sep="_")
 write.table(SharedUniqueElementsGene_df, file.path(out.dir, filename), sep = "\t", row.names = F)
 
-# Cumulative density plot of distances to the TSS for each groups
-distTSSplotSharedUnique <- ggplot(SharedUniqueElementsGene_df, aes(x=abs(distance), color=group)) + 
-  stat_ecdf() + 
-  theme_bw() +
-  xlab("Distance to TSS") + 
-  ylab("Cumulative density")
-
-# Saving as a PDF
-filename <- paste(pred1name, pred2name, "shared_unique_TargetGene_distTSSplot.pdf", sep="_")
-ggsave(file.path(out.dir, filename), 
-       distTSSplotSharedUnique,
-       width = 6, height = 5)
+# Plotting cumulative density
+plotCDF(plotdata=SharedUniqueElementsGene_df,
+        xvar="absdistance",
+        xlab="Distance to TSS",
+        color="group",
+        filename=paste(pred1name, pred2name, "shared_unique_TargetGene_distTSSplot.pdf", sep="_"))
 
 # TODO: plot additional features
 # N of cell types where the gene is expressed?
@@ -721,47 +697,14 @@ ggsave(file.path(out.dir, filename),
 # Venn diagram of overlapping enhancer-gene-celltype combos
 SharedUniqueElementsGene_df$longname <- paste(SharedUniqueElementsGene_df$chr, SharedUniqueElementsGene_df$start, SharedUniqueElementsGene_df$end, SharedUniqueElementsGene_df$TargetGene, sep="_")
 
-pred1.links <- SharedUniqueElementsGene_df[which(SharedUniqueElementsGene_df$group %in% c(paste0(pred1name,".unique"), paste0(pred1name,".overlapping.",pred2name))),]$longname
-pred2.links <- SharedUniqueElementsGene_df[which(SharedUniqueElementsGene_df$group %in% c(paste0(pred2name,".unique"), paste0(pred1name,".overlapping.",pred2name))),]$longname
+pred1Links <- SharedUniqueElementsGene_df[which(SharedUniqueElementsGene_df$group %in% c(paste0(pred1name,".unique"), paste0(pred1name,".overlapping.",pred2name))),]$longname
+pred2Links <- SharedUniqueElementsGene_df[which(SharedUniqueElementsGene_df$group %in% c(paste0(pred2name,".unique"), paste0(pred1name,".overlapping.",pred2name))),]$longname
 
 # Proportion of shared enhancer-gene combos
-length(intersect(pred1.links, pred2.links))/length(unique(c(pred1.links, pred2.links)))
+length(intersect(pred1Links, pred2Links))/length(unique(c(pred1Links, pred2Links)))
 
-filename <- paste(pred1name, pred2name, "EG_Venn.tiff", sep="_")
-venn.diagram(
-  x = list(pred1.links, pred2.links),
-  category.names = c(pred1name , pred2name),
-  filename = file.path(out.dir, filename),
-  output=TRUE,
-  
-  # Output features
-  imagetype="tiff" ,
-  height = 480 , 
-  width = 480 , 
-  resolution = 300,
-  compression = "lzw",
-  
-  # Circles
-  #lwd = 2,
-  #lty = 'blank',
-  #fill = 'blank',
-  
-  # Numbers
-  cex = .6,
-  #fontface = "bold",
-  fontfamily = "sans",
-  
-  # Set names
-  cat.cex = 0.6,
-  #cat.fontface = "bold",
-  cat.default.pos = "outer",
-  cat.pos = c(27, -27),
-  cat.dist = c(0.055, 0.055),
-  cat.fontfamily = "sans",
-  inverted=TRUE,
-  reverse=TRUE
-  #rotation = 1
-)
+# Creating the Venn diagram
+plotVenn(pred1.vector=pred1Links, pred2.vector=pred2Links, filename=paste(pred1name, pred2name, "EG_Venn.tiff", sep="_"))
 
 # ======================================
 # Finding overlapping and unique element-gene-celltype combinations
@@ -859,6 +802,7 @@ proc.time() - ptm
 names(SharedUniqueElementsGeneCell) <- genes_celltypes
 # Collapsing to a table
 SharedUniqueElementsGeneCell_df <- as.data.frame(do.call(dplyr::bind_rows, SharedUniqueElementsGeneCell))
+SharedUniqueElementsGeneCell_df$absdistance <- abs(SharedUniqueElementsGeneCell_df$distance)
 head(SharedUniqueElementsGeneCell_df)
 dim(SharedUniqueElementsGeneCell_df)
 
@@ -866,18 +810,12 @@ dim(SharedUniqueElementsGeneCell_df)
 filename <- paste(pred1name, pred2name, "_shared_unique_TargetGeneCellType.tsv", sep="_")
 write.table(SharedUniqueElementsGeneCell_df, file.path(out.dir, filename), sep = "\t", row.names = F)
 
-# Cumulative density plot of distances to the TSS for each groups
-distTSSplotSharedUnique <- ggplot(SharedUniqueElementsGeneCell_df, aes(x=abs(distance), color=group)) + 
-  stat_ecdf() + 
-  theme_bw() +
-  xlab("Distance to TSS") + 
-  ylab("Cumulative density")
-
-# Saving as a PDF
-filename <- paste(pred1name, pred2name, "shared_unique_TargetGeneCellType_distTSSplot.pdf", sep="_")
-ggsave(file.path(out.dir, filename), 
-       distTSSplot,
-       width = 6, height = 5)
+# Plotting cumulative density
+plotCDF(plotdata=SharedUniqueElementsGeneCell_df,
+        xvar="absdistance",
+        xlab="Distance to TSS",
+        color="group",
+        filename=paste(pred1name, pred2name, "shared_unique_TargetGeneCellType_distTSSplot.pdf", sep="_"))
 
 # TODO: plot additional features
 # N of cell types where the gene is expressed?
@@ -885,44 +823,11 @@ ggsave(file.path(out.dir, filename),
 # Venn diagram of overlapping enhancer-gene-celltype combos
 SharedUniqueElementsGeneCell_df$longname <- paste(SharedUniqueElementsGeneCell_df$chr, SharedUniqueElementsGeneCell_df$start, SharedUniqueElementsGeneCell_df$end, SharedUniqueElementsGeneCell_df$TargetGene, SharedUniqueElementsGeneCell_df$CellType, sep="_")
 
-pred1.links <- SharedUniqueElementsGeneCell_df[which(SharedUniqueElementsGeneCell_df$group %in% c(paste0(pred1name,".unique"), paste0(pred1name,".overlapping.",pred2name))),]$longname
-pred2.links <- SharedUniqueElementsGeneCell_df[which(SharedUniqueElementsGeneCell_df$group %in% c(paste0(pred2name,".unique"), paste0(pred1name,".overlapping.",pred2name))),]$longname
+pred1ElementGeneCell <- SharedUniqueElementsGeneCell_df[which(SharedUniqueElementsGeneCell_df$group %in% c(paste0(pred1name,".unique"), paste0(pred1name,".overlapping.",pred2name))),]$longname
+pred2ElementGeneCell <- SharedUniqueElementsGeneCell_df[which(SharedUniqueElementsGeneCell_df$group %in% c(paste0(pred2name,".unique"), paste0(pred1name,".overlapping.",pred2name))),]$longname
 
 # Proportion of shared enhancer-gene-celltype combos
-length(intersect(pred1.links, pred2.links))/length(unique(c(pred1.links, pred2.links)))
+length(intersect(pred1ElementGeneCell, pred2ElementGeneCell))/length(unique(c(pred1ElementGeneCell, pred2ElementGeneCell)))
 
-filename <- paste(pred1name, pred2name, "EGcelltype_Venn.tiff", sep="_")
-venn.diagram(
-  x = list(pred1.links, pred2.links),
-  category.names = c(pred1name , pred2name),
-  filename = file.path(out.dir, filename),
-  output=TRUE,
-  
-  # Output features
-  imagetype="tiff" ,
-  height = 480 , 
-  width = 480 , 
-  resolution = 300,
-  compression = "lzw",
-  
-  # Circles
-  #lwd = 2,
-  #lty = 'blank',
-  #fill = 'blank',
-  
-  # Numbers
-  cex = .6,
-  #fontface = "bold",
-  fontfamily = "sans",
-  
-  # Set names
-  cat.cex = 0.6,
-  #cat.fontface = "bold",
-  cat.default.pos = "outer",
-  cat.pos = c(27, -27),
-  cat.dist = c(0.055, 0.055),
-  cat.fontfamily = "sans",
-  inverted=TRUE,
-  reverse=TRUE
-  #rotation = 1
-)
+# Creating the Venn diagram
+plotVenn(pred1.vector=pred1ElementGeneCell, pred2.vector=pred2ElementGeneCell, filename=paste(pred1name, pred2name, "EGcelltype_Venn.tiff", sep="_"))
