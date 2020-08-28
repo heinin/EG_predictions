@@ -63,7 +63,7 @@ out.dir <- opt$out.dir
 
 # Cumulative density
 plotCDF <- function(plotdata, xvar, xlab, color, filename){
-  distTSSplot <- ggplot(plotdata, aes(x=eval(parse(text = xvar)), color=eval(parse(text = color)))) + 
+  CDFplot <- ggplot(plotdata, aes(x=eval(parse(text = xvar)), color=eval(parse(text = color)))) + 
     stat_ecdf() + 
     theme_bw() +
     xlab(xlab) + 
@@ -72,7 +72,7 @@ plotCDF <- function(plotdata, xvar, xlab, color, filename){
   
   # Saving as a PDF
   ggsave(file.path(out.dir, filename), 
-         distTSSplot,
+         CDFplot,
          width = 6, height = 5)
 }
 
@@ -216,7 +216,7 @@ CellTypeSummaries <- lapply(pred.list, function(dt) {
 })
 
 names(CellTypeSummaries) <- c(pred1name, pred2name)
-CellTypeSummaries.df <- merge(CellTypeSummaries[[1]], CellTypeSummaries[[2]], by="CellType", all=T, suffixes = c(paste0(".", pred1name), paste0(".", pred2name)))
+#CellTypeSummaries.df <- merge(CellTypeSummaries[[1]], CellTypeSummaries[[2]], by="CellType", all=T, suffixes = c(paste0(".", pred1name), paste0(".", pred2name)))
 
 # Saving to a file
 file.name <- paste(pred1name, "CellTypeSummary.tsv", sep="_")
@@ -225,8 +225,8 @@ write.table(CellTypeSummaries[[pred1name]], file.path(out.dir, file.name), sep =
 file.name <- paste(pred2name, "CellTypeSummary.tsv", sep="_")
 write.table(CellTypeSummaries[[pred2name]], file.path(out.dir, file.name), sep = "\t", quote = F, col.names = T, row.names = F)
 
-file.name <- paste(pred1name, pred2name, "CellTypeSummary.tsv", sep="_")
-write.table(CellTypeSummaries.df, file.path(out.dir, file.name), sep = "\t", quote = F, col.names = T, row.names = F)
+#file.name <- paste(pred1name, pred2name, "CellTypeSummary.tsv", sep="_")
+#write.table(CellTypeSummaries.df, file.path(out.dir, file.name), sep = "\t", quote = F, col.names = T, row.names = F)
 
 # For each gene in a given cell type, finding the total number of enhancers and unique basepairs
 GeneCellTypeSummaries <- lapply(pred.list, function(dt) {
@@ -583,6 +583,19 @@ pred2Enhancers <- unique(c(pred2.unique$name, pred1.overlapping.pred2$name))
 # Proportion of shared elements
 length(intersect(pred1Enhancers, pred2Enhancers))/length(unique(c(pred1Enhancers, pred2Enhancers)))
 
+# Writing to a file
+filename <- paste(pred1name, "overlapping", pred2name, "elements.tsv", sep="_")
+write.table(pred1.overlapping.pred2, file.path(out.dir, filename), sep = "\t", row.names = F)
+
+filename <- paste(pred2name, "overlapping", pred1name, "elements.tsv", sep="_")
+write.table(pred2.overlapping.pred1, file.path(out.dir, filename), sep = "\t", row.names = F)
+
+filename <- paste(pred1name, "unique_elements.tsv", sep="_")
+write.table(pred1.unique, file.path(out.dir, filename), sep = "\t", row.names = F)
+
+filename <- paste(pred2name, "unique_elements.tsv", sep="_")
+write.table(pred2.unique, file.path(out.dir, filename), sep = "\t", row.names = F)
+
 # Creating the Venn diagram
 plotVenn(pred1.vector=pred1Enhancers, pred2.vector=pred2Enhancers, pred1name=pred1name, pred2name=pred2name, filename=paste(pred1name, pred2name, "elements_Venn.tiff", sep="_"))
 
@@ -613,7 +626,7 @@ pred2.df <- as.data.frame(pred2)
 ptm <- proc.time()
 # For every gene, find overlapping and unique elements per gene
 SharedUniqueElementsGene <- lapply(genes, function(TargetGene){
-  message(TargetGene)
+  #message(TargetGene)
   pred1.gene <- as.data.table(pred1.df[which(pred1.df$TargetGene==TargetGene),])
   rownames(pred1.gene) <- NULL
   pred2.gene <- as.data.table(pred2.df[which(pred2.df$TargetGene==TargetGene),])
@@ -680,7 +693,7 @@ head(SharedUniqueElementsGene_df)
 dim(SharedUniqueElementsGene_df)
 
 # Writing to a file
-filename <- paste(pred1name, pred2name, "_shared_unique_TargetGene.tsv", sep="_")
+filename <- paste(pred1name, pred2name, "shared_unique_TargetGene.tsv", sep="_")
 write.table(SharedUniqueElementsGene_df, file.path(out.dir, filename), sep = "\t", row.names = F)
 
 # Plotting cumulative density
@@ -691,7 +704,6 @@ plotCDF(plotdata=SharedUniqueElementsGene_df,
         filename=paste(pred1name, pred2name, "shared_unique_TargetGene_distTSSplot.pdf", sep="_"))
 
 # TODO: plot additional features
-# N of cell types where the gene is expressed?
 
 # Venn diagram of overlapping enhancer-gene-celltype combos
 SharedUniqueElementsGene_df$longname <- paste(SharedUniqueElementsGene_df$chr, SharedUniqueElementsGene_df$start, SharedUniqueElementsGene_df$end, SharedUniqueElementsGene_df$TargetGene, sep="_")
@@ -730,7 +742,7 @@ length(genes_celltypes)
 ptm <- proc.time()
 # For every gene-celltype combination, find overlapping and unique elements
 SharedUniqueElementsGeneCell <- lapply(genes_celltypes, function(GeneCelltype){
-  message(GeneCelltype)
+  #message(GeneCelltype)
   
   pred1.gene.cell <- pred1.df[which(pred1.df$gene.cell==GeneCelltype),]
   rownames(pred1.gene.cell) <- NULL
@@ -806,7 +818,7 @@ head(SharedUniqueElementsGeneCell_df)
 dim(SharedUniqueElementsGeneCell_df)
 
 # Writing to a file
-filename <- paste(pred1name, pred2name, "_shared_unique_TargetGeneCellType.tsv", sep="_")
+filename <- paste(pred1name, pred2name, "shared_unique_TargetGeneCellType.tsv", sep="_")
 write.table(SharedUniqueElementsGeneCell_df, file.path(out.dir, filename), sep = "\t", row.names = F)
 
 # Plotting cumulative density
@@ -817,7 +829,6 @@ plotCDF(plotdata=SharedUniqueElementsGeneCell_df,
         filename=paste(pred1name, pred2name, "shared_unique_TargetGeneCellType_distTSSplot.pdf", sep="_"))
 
 # TODO: plot additional features
-# N of cell types where the gene is expressed?
 
 # Venn diagram of overlapping enhancer-gene-celltype combos
 SharedUniqueElementsGeneCell_df$longname <- paste(SharedUniqueElementsGeneCell_df$chr, SharedUniqueElementsGeneCell_df$start, SharedUniqueElementsGeneCell_df$end, SharedUniqueElementsGeneCell_df$TargetGene, SharedUniqueElementsGeneCell_df$CellType, sep="_")
